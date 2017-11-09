@@ -7,7 +7,8 @@ import (
 type VehicleType int
 
 const (
-	Vehicle_Arrv VehicleType = iota
+	Vehicle_Unknown VehicleType = -1
+	Vehicle_Arrv    VehicleType = iota
 	Vehicle_Fighter
 	Vehicle_Helicopter
 	Vehicle_Ifv

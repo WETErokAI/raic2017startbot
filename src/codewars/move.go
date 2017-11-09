@@ -18,6 +18,8 @@ type Move struct {
 
 func NewMove() *Move {
 	return &Move{
-		Facility_id: -1,
+		Action:       Action_None,
+		Vehicle_type: Vehicle_Unknown,
+		Facility_id:  0,
 	}
 }
