@@ -5,7 +5,7 @@ import (
 	. "codewars"
 	"encoding/binary"
 	"errors"
-	"fmt"
+	//"fmt"
 	"net"
 )
 
@@ -23,7 +23,8 @@ type Client struct {
 	w    *bufio.Writer
 	r    *bufio.Reader
 
-	previousPlayers []*Player
+	previousPlayers    []*Player
+	previousFacilities []*Facility
 
 	TerrainByCellXY [][]TerrainType
 	WeatherByCellXY [][]WeatherType
@@ -51,7 +52,7 @@ func NewClient(addr string) (*Client, error) {
 		return nil, err
 	}
 	return &Client{conn, bufio.NewWriter(conn), bufio.NewReader(conn),
-		nil, nil, nil, // previous
+		nil, nil, nil, nil, // previous
 		make(map[int64]*Player), make(map[int64]interface{}), // previousById
 	}, nil
 }
@@ -66,9 +67,9 @@ func (c *Client) WriteToken(token string) {
 	c.flush()
 }
 
-func (c *Client) WriteProtocolVersion() {
+func (c *Client) WriteProtocolVersion(ver int) {
 	c.writeOpcode(Message_ProtoVersion)
-	c.writeInt(3)
+	c.writeInt(ver)
 	c.flush()
 }
 
@@ -104,7 +105,6 @@ func (c *Client) ReadTeamSize() int {
 
 func (c *Client) ReadPlayerContext() *PlayerContext {
 	opcode := c.readByte()
-	fmt.Println(opcode)
 	if opcode == byte(Message_GameOver) {
 		return nil
 	}
@@ -119,23 +119,27 @@ func (c *Client) ReadPlayerContext() *PlayerContext {
 }
 
 func (c *Client) ReadWorld() *World {
-	c.ensureMessageType(c.readByte(), Message_GameContext)
-
 	if !c.readBool() {
 		return nil
 	}
-	return &World{
-		TickIndex:       c.readInt(),
-		TickCount:       c.readInt(),
-		Width:           c.readFloat64(),
-		Height:          c.readFloat64(),
-		Players:         c.ReadPlayers(),
-		NewVehicles:     c.ReadVehicles(),
-		VehicleUpdate:   c.ReadVehicleUpdates(),
-		TerrainByCellXY: c.ReadTerrainByCellXY(),
-		WeatherByCellXY: c.ReadWeatherByCellXY(),
-		Facilities:      c.ReadFacilities(),
+	w := World{
+		TickIndex:     c.readInt(),
+		TickCount:     c.readInt(),
+		Width:         c.readFloat64(),
+		Height:        c.readFloat64(),
+		Players:       c.ReadPlayers(),
+		NewVehicles:   c.ReadVehicles(),
+		VehicleUpdate: c.ReadVehicleUpdates(),
 	}
+	if c.TerrainByCellXY == nil {
+		w.TerrainByCellXY = c.ReadTerrainByCellXY()
+	}
+	if c.WeatherByCellXY == nil {
+		w.WeatherByCellXY = c.ReadWeatherByCellXY()
+	}
+	w.Facilities = c.ReadFacilities()
+
+	return &w
 }
 
 func (c *Client) ReadPlayers() []*Player {
@@ -223,7 +227,11 @@ func (c *Client) ReadVehicleUpdate() *VehicleUpdate {
 		return nil
 	}
 	return &VehicleUpdate{
-		CircularUnit:                 c.readCircularUnit(),
+		Unit: Unit{
+			Id: c.readInt64(),
+			X:  c.readFloat64(),
+			Y:  c.readFloat64(),
+		},
 		Durability:                   c.readInt(),
 		RemainingAttackCooldownTicks: c.readInt(),
 		Selected:                     c.readBool(),
@@ -232,46 +240,52 @@ func (c *Client) ReadVehicleUpdate() *VehicleUpdate {
 }
 
 func (c *Client) ReadTerrainByCellXY() [][]TerrainType {
-	if c.TerrainByCellXY == nil {
-		TerrainByCellXY := c.readIntArray2D()
+	countX := c.readInt()
+	rX := make([][]TerrainType, countX)
+	for i := range rX {
 
-		c.TerrainByCellXY = make([][]TerrainType, len(TerrainByCellXY))
-		for i, x := range TerrainByCellXY {
+		countY := c.readInt()
 
-			y := make([]TerrainType, len(x))
-			for n, y1 := range x {
-				y[n] = TerrainType(y1)
-			}
-			c.TerrainByCellXY[i] = y
+		rY := make([]TerrainType, countY)
+		for i := range rY {
+			rY[i] = TerrainType(c.readByte())
 		}
+		rX[i] = rY
 	}
+
+	c.TerrainByCellXY = rX
 	return c.TerrainByCellXY
 }
 
 func (c *Client) ReadWeatherByCellXY() [][]WeatherType {
-	if c.WeatherByCellXY == nil {
-		WeatherByCellXY := c.readIntArray2D()
+	countX := c.readInt()
+	rX := make([][]WeatherType, countX)
+	for i := range rX {
 
-		c.WeatherByCellXY = make([][]WeatherType, len(WeatherByCellXY))
-		for i, x := range WeatherByCellXY {
+		countY := c.readInt()
 
-			y := make([]WeatherType, len(x))
-			for n, y1 := range x {
-				y[n] = WeatherType(y1)
-			}
-			c.WeatherByCellXY[i] = y
+		rY := make([]WeatherType, countY)
+		for i := range rY {
+			rY[i] = WeatherType(c.readByte())
 		}
-
+		rX[i] = rY
 	}
+
+	c.WeatherByCellXY = rX
+
 	return c.WeatherByCellXY
 }
 
 func (c *Client) ReadFacilities() []*Facility {
 	l := c.readInt()
+	if l < 0 {
+		return c.previousFacilities
+	}
 	f := make([]*Facility, l)
 	for i := range f {
 		f[i] = c.ReadFacility()
 	}
+	c.previousFacilities = f
 	return f
 }
 

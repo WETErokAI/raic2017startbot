@@ -1,7 +1,7 @@
 package codewars
 
 type VehicleUpdate struct {
-	CircularUnit
+	Unit
 	Durability                   int
 	RemainingAttackCooldownTicks int
 	Selected                     bool

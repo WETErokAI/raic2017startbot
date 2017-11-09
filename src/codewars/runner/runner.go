@@ -5,6 +5,8 @@ import (
 	"flag"
 )
 
+const Version int = 1
+
 type Runner struct {
 	addr    string
 	token   string
@@ -38,7 +40,7 @@ func (r *Runner) Run() error {
 	defer client.Close()
 
 	client.WriteToken(r.token)
-	client.WriteProtocolVersion()
+	client.WriteProtocolVersion(Version)
 	client.ReadTeamSize()
 	game := client.ReadGameContext()
 
